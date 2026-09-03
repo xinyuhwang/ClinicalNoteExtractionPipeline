@@ -1,0 +1,17 @@
+[project]
+name = "clinical-pipeline"
+version = "0.1.0"
+description = "Tiny LLM extraction pipeline: prompt builder -> LLM -> structured output -> validation -> logging"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.5",
+    "anthropic>=0.40",
+    "typer>=0.12",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
