@@ -17,8 +17,8 @@ from __future__ import annotations
 from typing import Literal, Optional
 
 from .logging_store import LogStore, note_hash
-from .models import ExtractionResult, PipelineRunResult
-from .orchestration import run_critique_loop, run_ensemble
+from .models import PipelineRunResult, ValidationIssue
+from .orchestration import critique_rejected_indices, run_critique_loop, run_ensemble
 from .prompts import build_prompt
 from .validation import DEFAULT_CONFIDENCE_THRESHOLD, flagged_findings_text, validate_all
 
@@ -119,15 +119,22 @@ class ClinicalPipeline:
         critique_text = run_critique_loop(self.llm_client, note_text, resp.result)
 
         validated = validate_all(resp.result.findings, note_text, self.confidence_threshold)
-        # Lightweight heuristic: if the critique explicitly names a condition
-        # as unsupported/hallucinated, drop it even if it passed validation.
-        critique_lower = critique_text.lower()
-        for vf in validated:
-            cond_lower = vf.finding.condition.lower()
-            if cond_lower in critique_lower and any(
-                bad in critique_lower for bad in ["unsupported", "hallucin", "not supported", "mismatch"]
-            ):
+        # Lightweight heuristic: if the critique names a condition as
+        # unsupported/hallucinated, drop it even if it passed validation. The
+        # marker search is scoped per-sentence so rejecting one finding does
+        # not reject every other finding the critique discusses.
+        rejected = critique_rejected_indices(critique_text, resp.result.findings)
+        for i, vf in enumerate(validated):
+            if i in rejected:
                 vf.kept = False
+                vf.issues.append(
+                    ValidationIssue(
+                        finding_index=i,
+                        issue_type="critique_rejected",
+                        detail="self-critique flagged this finding as unsupported or mismatched",
+                        severity="error",
+                    )
+                )
 
         return PipelineRunResult(
             note_hash=note_hash(note_text),

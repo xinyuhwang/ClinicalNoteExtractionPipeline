@@ -115,9 +115,21 @@ def validate_all(
     return validated
 
 
+def _dedup_rank(vf: ValidatedFinding) -> tuple[int, float]:
+    """Ranking for picking the survivor among duplicates.
+
+    Validation outcome outranks confidence. Ranking on confidence alone lets a
+    finding that already failed grounding beat a grounded one purely by being
+    more confident -- which drops the good finding and keeps nothing, since the
+    winner stays kept=False.
+    """
+    return (1 if vf.kept else 0, vf.finding.confidence)
+
+
 def _flag_duplicates(validated: list[ValidatedFinding]) -> None:
-    """Mark near-duplicate conditions (case-insensitive exact match on
-    normalized condition string) -- keep the higher-confidence one."""
+    """Mark duplicate conditions (case-insensitive exact match on the
+    normalized condition string) -- keep the one that passed validation,
+    breaking ties on confidence."""
     seen: dict[str, int] = {}  # normalized condition -> index of best kept so far
     for i, vf in enumerate(validated):
         key = vf.finding.condition.strip().lower()
@@ -125,14 +137,14 @@ def _flag_duplicates(validated: list[ValidatedFinding]) -> None:
             prev_idx = seen[key]
             prev = validated[prev_idx]
             loser_idx, winner_idx = (
-                (i, prev_idx) if vf.finding.confidence <= prev.finding.confidence else (prev_idx, i)
+                (prev_idx, i) if _dedup_rank(vf) > _dedup_rank(prev) else (i, prev_idx)
             )
             validated[loser_idx].kept = False
             validated[loser_idx].issues.append(
                 ValidationIssue(
                     finding_index=loser_idx,
                     issue_type="duplicate",
-                    detail=f"duplicate of finding at index {winner_idx} ('{key}'); lower confidence dropped",
+                    detail=f"duplicate of finding at index {winner_idx} ('{key}'); weaker copy dropped",
                     severity="warning",
                 )
             )

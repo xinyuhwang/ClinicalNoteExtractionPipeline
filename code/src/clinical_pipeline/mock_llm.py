@@ -37,7 +37,7 @@ class MockLLMClient:
         self.model = model
         self.jitter_confidence = jitter_confidence
 
-    def extract(self, note_text: str, prompt_version: str = "v1", extra_prompt_kwargs=None, temperature=None) -> LLMResponse:
+    def extract(self, note_text: str, prompt_version: str = "v1", extra_prompt_kwargs=None, effort=None) -> LLMResponse:
         start = time.perf_counter()
         text_lower = note_text.lower()
         findings: list[ClinicalFinding] = []
